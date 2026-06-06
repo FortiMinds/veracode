@@ -90,3 +90,23 @@ jobs:
               issue_number: 1,
               body: command
             });
+      - name: Trigger Veracode Scan
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const owner = '${{ steps.repo.outputs.owner }}';
+            const repo = '${{ steps.repo.outputs.repo }}';
+            const branch = '${{ inputs.source_branch }}';
+
+            const command = `Veracode IAC Scan [branch: ${branch}]`;
+
+            console.log(`Triggering Veracode scan for ${owner}/${repo}`);
+            console.log(`Command: ${command}`);
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: 1,
+              body: command
+            });
