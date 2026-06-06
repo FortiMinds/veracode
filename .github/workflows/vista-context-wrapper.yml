@@ -1,0 +1,47 @@
+name: Vista Context Wrapper
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        required: true
+        type: string
+      source_branch:
+        required: true
+        type: string
+      commit_sha:
+        required: true
+        type: string
+      event_type:
+        required: true
+        type: string
+      pull_request_number:
+        required: false
+        type: string
+      vista_context_json:
+        required: true
+        type: string
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print context
+        run: |
+          echo '${{ inputs.vista_context_json }}' > vista-context.json
+          cat vista-context.json
+
+      - name: Extract Veracode policy
+        id: ctx
+        run: |
+          POLICY=$(jq -r '.policy' vista-context.json)
+          APP_NAME=$(jq -r '.veracode_application_name' vista-context.json)
+          echo "policy=$POLICY" >> "$GITHUB_OUTPUT"
+          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Use context in scan
+        run: |
+          echo "Repo: ${{ inputs.source_repo }}"
+          echo "App Name: ${{ steps.ctx.outputs.app_name }}"
+          echo "Policy: ${{ steps.ctx.outputs.policy }}"
