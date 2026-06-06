@@ -45,3 +45,11 @@ jobs:
           echo "Repo: ${{ inputs.source_repo }}"
           echo "App Name: ${{ steps.ctx.outputs.app_name }}"
           echo "Policy: ${{ steps.ctx.outputs.policy }}"
+          
+      - name: Run Veracode scan using Vista context
+        uses: veracode/veracode-uploadandscan-action@master
+        with:
+          vid: ${{ secrets.VERACODE_API_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY }}
+          appname: ${{ steps.ctx.outputs.app_name }}
+          filepath: ./artifact.zip
