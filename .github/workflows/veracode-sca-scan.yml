@@ -150,7 +150,22 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             helper/cli/*
-
+            
+      - name: Resolve Vista Context
+        id: vista
+        run: |
+          RESPONSE=$(curl -s \
+          -X POST "${{ secrets.VISTA_API_URL }}/repository-context" \
+          -H "Authorization: Bearer ${{ secrets.VISTA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "repository":"${{ github.event.client_payload.repository.name }}",
+            "owner":"${{ github.event.client_payload.repository.owner }}"
+          }')
+          echo "$RESPONSE" > vista-context.json
+          PROFILE=$(jq -r '.veracode_application_name' vista-context.json)
+          echo "profile_name=$PROFILE" >> "$GITHUB_OUTPUT"
+          
       - name: Run Veracode SCA
         env:
           SRCCLR_API_TOKEN: ${{ secrets.VERACODE_AGENT_TOKEN }}
@@ -166,6 +181,6 @@ jobs:
           breakBuildOnPolicyFindings: ${{ github.event.client_payload.user_config.break_build_policy_findings }}
           debug: ${{ github.event.client_payload.user_config.debug }}
           sca_fix_enabled: ${{ github.event.client_payload.user_config.sca_fix_enabled }}
-          profile_name: ${{ github.event.client_payload.user_config.profile_name }}
+          profile_name: ${{ steps.vista.outputs.profile_name }}
           pr_number: ${{ github.event.client_payload.pr_number }}
 
