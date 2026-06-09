@@ -166,6 +166,13 @@ jobs:
           PROFILE=$(jq -r '.veracode_application_name' vista-context.json)
           echo "profile_name=$PROFILE" >> "$GITHUB_OUTPUT"
           
+      - name: Update Veracode Context
+        run: |
+          echo "Using App Name: ${{ steps.vista.outputs.app_name }}"
+          echo "Using Policy: ${{ steps.vista.outputs.policy }}"
+
+    # Future:
+    # Update Veracode Application API    
       - name: Run Veracode SCA
         env:
           SRCCLR_API_TOKEN: ${{ secrets.VERACODE_AGENT_TOKEN }}
