@@ -69,7 +69,7 @@ jobs:
       - name: Resolve Vista repository context
         id: resolve
         run: |
-          RESPONSE=$(curl -sf -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.VISTA_CONTEXT_API_TOKEN }}" \
             -d '{
