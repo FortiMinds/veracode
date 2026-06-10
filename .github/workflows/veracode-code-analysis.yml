@@ -69,21 +69,34 @@ jobs:
       - name: Resolve Vista repository context
         id: resolve
         run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.VISTA_CONTEXT_API_TOKEN }}" \
             -d '{
               "repo_name": "${{ github.event.client_payload.repository.name }}",
               "full_name": "${{ github.event.client_payload.repository.full_name }}",
-              "org_name": "${{ github.event.client_payload.repository.owner }}"
+              "org_name": "${{ github.event.client_payload.repository.owner }}",
+              "branch": "${{ github.event.client_payload.repository.branch }}",
+              "commit_sha": "${{ github.event.client_payload.sha }}",
+              "event_type": "${{ github.event.client_payload.event_type }}"
             }')
       
-          echo "$RESPONSE" > vista-context.json
+          HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+      
+          echo "HTTP Status: $HTTP_STATUS"
+          echo "$HTTP_BODY" > vista-context.json
           cat vista-context.json
+      
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Vista Context API failed"
+            exit 1
+          fi
       
           PROFILE_NAME=$(jq -r '.veracode.profileName // empty' vista-context.json)
           POLICY_NAME=$(jq -r '.veracode.policyName // empty' vista-context.json)
           CRITICALITY=$(jq -r '.veracode.businessCriticality // empty' vista-context.json)
+          APP_GUID=$(jq -r '.veracode.appGuid // empty' vista-context.json)
       
           if [ -z "$PROFILE_NAME" ]; then
             PROFILE_NAME="${{ github.event.client_payload.user_config.profile_name }}"
@@ -93,9 +106,15 @@ jobs:
             POLICY_NAME="${{ github.event.client_payload.policy_name }}"
           fi
       
+          echo "Resolved Profile Name: $PROFILE_NAME"
+          echo "Resolved Policy Name: $POLICY_NAME"
+          echo "Resolved Criticality: $CRITICALITY"
+          echo "Resolved App GUID: $APP_GUID"
+      
           echo "profile_name=$PROFILE_NAME" >> "$GITHUB_OUTPUT"
           echo "policy_name=$POLICY_NAME" >> "$GITHUB_OUTPUT"
           echo "criticality=$CRITICALITY" >> "$GITHUB_OUTPUT"
+          echo "app_guid=$APP_GUID" >> "$GITHUB_OUTPUT"
 
   validations:
     needs: [register, vista_context]
