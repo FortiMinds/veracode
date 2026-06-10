@@ -63,34 +63,37 @@ jobs:
       criticality: ${{ steps.resolve.outputs.criticality }}
 
     steps:
+      - name: Debug client payload
+        run: |
+          echo '${{ toJson(github.event.client_payload) }}'
       - name: Resolve Vista repository context
         id: resolve
         run: |
-          RESPONSE=curl -sf -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
+          RESPONSE=$(curl -sf -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.VISTA_CONTEXT_API_TOKEN }}" \
             -d '{
-              "repo_id": "${{ github.event.repository.id }}",
-              "repo_name": "${{ github.event.repository.name }}",
-              "full_name": "${{ github.repository }}",
-              "org_name": "${{ github.repository_owner }}"
-            }'
-
+              "repo_id": "${{ github.event.client_payload.repository.id }}",
+              "repo_name": "${{ github.event.client_payload.repository.name }}",
+              "full_name": "${{ github.event.client_payload.repository.full_name }}",
+              "org_name": "${{ github.event.client_payload.repository.owner }}"
+            }')
+      
           echo "$RESPONSE" > vista-context.json
           cat vista-context.json
-
-          PROFILE_NAME=$(jq -r '.veracode_application_name // empty' vista-context.json)
-          POLICY_NAME=$(jq -r '.policy // empty' vista-context.json)
-          CRITICALITY=$(jq -r '.criticality // empty' vista-context.json)
-          
+      
+          PROFILE_NAME=$(jq -r '.veracode.profileName // empty' vista-context.json)
+          POLICY_NAME=$(jq -r '.veracode.policyName // empty' vista-context.json)
+          CRITICALITY=$(jq -r '.veracode.businessCriticality // empty' vista-context.json)
+      
           if [ -z "$PROFILE_NAME" ]; then
             PROFILE_NAME="${{ github.event.client_payload.user_config.profile_name }}"
           fi
-
+      
           if [ -z "$POLICY_NAME" ]; then
             POLICY_NAME="${{ github.event.client_payload.policy_name }}"
           fi
-
+      
           echo "profile_name=$PROFILE_NAME" >> "$GITHUB_OUTPUT"
           echo "policy_name=$POLICY_NAME" >> "$GITHUB_OUTPUT"
           echo "criticality=$CRITICALITY" >> "$GITHUB_OUTPUT"
