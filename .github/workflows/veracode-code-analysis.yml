@@ -66,18 +66,22 @@ jobs:
       - name: Resolve Vista repository context
         id: resolve
         run: |
-          RESPONSE=$(curl -s -X GET "${{ secrets.VISTA_CONTEXT_API_URL }}" \
+          RESPONSE=curl -sf -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.VISTA_CONTEXT_API_TOKEN }}" \
-            )
+            -d '{
+              "repo_id": "${{ github.event.repository.id }}",
+              "repo_name": "${{ github.event.repository.name }}",
+              "full_name": "${{ github.repository }}",
+              "org_name": "${{ github.repository_owner }}"
+            }'
 
           echo "$RESPONSE" > vista-context.json
           cat vista-context.json
 
-          PROFILE_NAME=$(jq -r '.data.business_application.metadata.veracode.profileName // empty' vista-context.json)
-          POLICY_NAME=$(jq -r '.data.business_application.metadata.veracode.policyName // empty' vista-context.json)
-          CRITICALITY=$(jq -r '.data.business_application.metadata.veracode.businessCriticality // empty' vista-context.json)
-          APP_GUID=$(jq -r '.data.business_application.metadata.veracode.appGuid // empty' vista-context.json)
+          PROFILE_NAME=$(jq -r '.veracode_application_name // empty' vista-context.json)
+          POLICY_NAME=$(jq -r '.policy // empty' vista-context.json)
+          CRITICALITY=$(jq -r '.criticality // empty' vista-context.json)
           
           if [ -z "$PROFILE_NAME" ]; then
             PROFILE_NAME="${{ github.event.client_payload.user_config.profile_name }}"
