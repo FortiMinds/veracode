@@ -73,7 +73,6 @@ jobs:
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.VISTA_CONTEXT_API_TOKEN }}" \
             -d '{
-              "repo_id": "${{ github.event.client_payload.repository.id }}",
               "repo_name": "${{ github.event.client_payload.repository.name }}",
               "full_name": "${{ github.event.client_payload.repository.full_name }}",
               "org_name": "${{ github.event.client_payload.repository.owner }}"
