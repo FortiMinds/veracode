@@ -74,10 +74,11 @@ jobs:
           echo "$RESPONSE" > vista-context.json
           cat vista-context.json
 
-          PROFILE_NAME=$(jq -r '.veracode_application_name // empty' vista-context.json)
-          POLICY_NAME=$(jq -r '.policy // empty' vista-context.json)
-          CRITICALITY=$(jq -r '.criticality // empty' vista-context.json)
-
+          PROFILE_NAME=$(jq -r '.data.business_application.metadata.veracode.profileName // empty' vista-context.json)
+          POLICY_NAME=$(jq -r '.data.business_application.metadata.veracode.policyName // empty' vista-context.json)
+          CRITICALITY=$(jq -r '.data.business_application.metadata.veracode.businessCriticality // empty' vista-context.json)
+          APP_GUID=$(jq -r '.data.business_application.metadata.veracode.appGuid // empty' vista-context.json)
+          
           if [ -z "$PROFILE_NAME" ]; then
             PROFILE_NAME="${{ github.event.client_payload.user_config.profile_name }}"
           fi
