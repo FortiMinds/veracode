@@ -23,6 +23,8 @@ on:
         type: string
 
     outputs:
+      onboarded:
+        value: ${{ jobs.resolve.outputs.onboarded }}
       profile_name:
         value: ${{ jobs.resolve.outputs.profile_name }}
       policy_name:
@@ -31,6 +33,10 @@ on:
         value: ${{ jobs.resolve.outputs.criticality }}
       app_guid:
         value: ${{ jobs.resolve.outputs.app_guid }}
+      compliance_status:
+        value: ${{ jobs.resolve.outputs.compliance_status }}
+      compliance_message:
+        value: ${{ jobs.resolve.outputs.compliance_message }}
 
     secrets:
       VISTA_CONTEXT_API_URL:
@@ -43,10 +49,13 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
+      onboarded: ${{ steps.resolve.outputs.onboarded }}
       profile_name: ${{ steps.resolve.outputs.profile_name }}
       policy_name: ${{ steps.resolve.outputs.policy_name }}
       criticality: ${{ steps.resolve.outputs.criticality }}
       app_guid: ${{ steps.resolve.outputs.app_guid }}
+      compliance_status: ${{ steps.resolve.outputs.compliance_status }}
+      compliance_message: ${{ steps.resolve.outputs.compliance_message }}
 
     steps:
       - name: Resolve Vista Context
@@ -67,10 +76,26 @@ jobs:
           HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
           HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
 
+          echo "Vista API HTTP Status: $HTTP_STATUS"
           echo "$HTTP_BODY" > vista-context.json
 
+          if [ "$HTTP_STATUS" = "404" ]; then
+            echo "Repository is not onboarded in Vista."
+
+            echo "onboarded=false" >> "$GITHUB_OUTPUT"
+            echo "profile_name=" >> "$GITHUB_OUTPUT"
+            echo "policy_name=" >> "$GITHUB_OUTPUT"
+            echo "criticality=" >> "$GITHUB_OUTPUT"
+            echo "app_guid=" >> "$GITHUB_OUTPUT"
+            echo "compliance_status=FAILED" >> "$GITHUB_OUTPUT"
+            echo "compliance_message=Repository is not mapped to a Business Application in Vista. Please complete Vista onboarding before security scanning." >> "$GITHUB_OUTPUT"
+
+            echo "::warning::Vista Compliance Check Failed - Repository is not mapped to a Business Application."
+            exit 0
+          fi
+
           if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
-            echo "Vista Context API failed with status $HTTP_STATUS"
+            echo "Vista Context API failed."
             cat vista-context.json
             exit 1
           fi
@@ -80,7 +105,31 @@ jobs:
           CRITICALITY=$(jq -r '.veracode.businessCriticality // empty' vista-context.json)
           APP_GUID=$(jq -r '.veracode.appGuid // empty' vista-context.json)
 
+          if [ -z "$PROFILE_NAME" ] || [ -z "$POLICY_NAME" ]; then
+            echo "Vista context exists but required Veracode metadata is missing."
+
+            echo "onboarded=false" >> "$GITHUB_OUTPUT"
+            echo "profile_name=" >> "$GITHUB_OUTPUT"
+            echo "policy_name=" >> "$GITHUB_OUTPUT"
+            echo "criticality=$CRITICALITY" >> "$GITHUB_OUTPUT"
+            echo "app_guid=$APP_GUID" >> "$GITHUB_OUTPUT"
+            echo "compliance_status=FAILED" >> "$GITHUB_OUTPUT"
+            echo "compliance_message=Repository is onboarded but missing required Veracode metadata. Please complete Veracode onboarding in Vista." >> "$GITHUB_OUTPUT"
+
+            echo "::warning::Vista Compliance Check Failed - Missing Veracode metadata."
+            exit 0
+          fi
+
+          echo "Resolved Vista Context"
+          echo "Profile Name: $PROFILE_NAME"
+          echo "Policy Name: $POLICY_NAME"
+          echo "Criticality: $CRITICALITY"
+          echo "App GUID: $APP_GUID"
+
+          echo "onboarded=true" >> "$GITHUB_OUTPUT"
           echo "profile_name=$PROFILE_NAME" >> "$GITHUB_OUTPUT"
           echo "policy_name=$POLICY_NAME" >> "$GITHUB_OUTPUT"
           echo "criticality=$CRITICALITY" >> "$GITHUB_OUTPUT"
           echo "app_guid=$APP_GUID" >> "$GITHUB_OUTPUT"
+          echo "compliance_status=PASSED" >> "$GITHUB_OUTPUT"
+          echo "compliance_message=Repository is onboarded in Vista and Veracode metadata is available." >> "$GITHUB_OUTPUT"
