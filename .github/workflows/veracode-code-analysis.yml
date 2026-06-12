@@ -54,102 +54,50 @@ jobs:
 
   vista_context:
     needs: register
-    runs-on: ${{ fromJson(github.event.client_payload.user_config.default_runs_on) }}
-    name: Resolve Vista Context
-
-    outputs:
-      profile_name: ${{ steps.resolve.outputs.profile_name }}
-      policy_name: ${{ steps.resolve.outputs.policy_name }}
-      criticality: ${{ steps.resolve.outputs.criticality }}
-
-    steps:
-      - name: Debug client payload
-        run: |
-          echo '${{ toJson(github.event.client_payload) }}'
-      - name: Resolve Vista repository context
-        id: resolve
-        run: |
-          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.VISTA_CONTEXT_API_TOKEN }}" \
-            -d '{
-              "repo_name": "${{ github.event.client_payload.repository.name }}",
-              "full_name": "${{ github.event.client_payload.repository.full_name }}",
-              "org_name": "${{ github.event.client_payload.repository.owner }}",
-              "branch": "${{ github.event.client_payload.repository.branch }}",
-              "commit_sha": "${{ github.event.client_payload.sha }}",
-              "event_type": "${{ github.event.client_payload.event_type }}"
-            }')
-      
-          HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
-          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
-      
-          echo "HTTP Status: $HTTP_STATUS"
-          echo "$HTTP_BODY" > vista-context.json
-          cat vista-context.json
-      
-          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
-            echo "Vista Context API failed"
-            exit 1
-          fi
-      
-          PROFILE_NAME=$(jq -r '.veracode.profileName // empty' vista-context.json)
-          POLICY_NAME=$(jq -r '.veracode.policyName // empty' vista-context.json)
-          CRITICALITY=$(jq -r '.veracode.businessCriticality // empty' vista-context.json)
-          APP_GUID=$(jq -r '.veracode.appGuid // empty' vista-context.json)
-      
-          if [ -z "$PROFILE_NAME" ]; then
-            PROFILE_NAME="${{ github.event.client_payload.user_config.profile_name }}"
-          fi
-      
-          if [ -z "$POLICY_NAME" ]; then
-            POLICY_NAME="${{ github.event.client_payload.policy_name }}"
-          fi
-      
-          echo "Resolved Profile Name: $PROFILE_NAME"
-          echo "Resolved Policy Name: $POLICY_NAME"
-          echo "Resolved Criticality: $CRITICALITY"
-          echo "Resolved App GUID: $APP_GUID"
-      
-          echo "profile_name=$PROFILE_NAME" >> "$GITHUB_OUTPUT"
-          echo "policy_name=$POLICY_NAME" >> "$GITHUB_OUTPUT"
-          echo "criticality=$CRITICALITY" >> "$GITHUB_OUTPUT"
-          echo "app_guid=$APP_GUID" >> "$GITHUB_OUTPUT"
-
+    uses: ./.github/workflows/vista-context-resolver.yml
+    with:
+      repo_name: ${{ github.event.client_payload.repository.name }}
+      full_name: ${{ github.event.client_payload.repository.full_name }}
+      org_name: ${{ github.event.client_payload.repository.owner }}
+      branch: ${{ github.event.client_payload.repository.branch }}
+      commit_sha: ${{ github.event.client_payload.sha }}
+      event_type: ${{ github.event.client_payload.event_type }}
+    secrets: inherit
+  
   validations:
-    needs: [register, vista_context]
-    runs-on: ${{ fromJson(github.event.client_payload.user_config.default_runs_on) }}
-    name: Validations
-    steps:
-      - name: Verify Veracode API credentials
-        id: verify_api_creds
-        uses: veracode/github-actions-integration-helper@v0.1.9
-        with:
-          action: validateVeracodeApiCreds
-          token: ${{ github.event.client_payload.token }}
-          vid: ${{ secrets.VERACODE_API_ID }}
-          vkey: ${{ secrets.VERACODE_API_KEY }}
-          appname: ${{ needs.vista_context.outputs.profile_name }}
-          source_repository: ${{ github.event.client_payload.repository.full_name }}
-          check_run_id: ${{ needs.register.outputs.run_id }}
-
-      - name: Verify Policy name
-        id: verify_policy_name
-        if: success()
-        uses: veracode/github-actions-integration-helper@v0.1.9
-        with:
-          action: validatePolicyName
-          token: ${{ github.event.client_payload.token }}
-          vid: ${{ secrets.VERACODE_API_ID }}
-          vkey: ${{ secrets.VERACODE_API_KEY }}
-          appname: ${{ needs.vista_context.outputs.profile_name }}
-          source_repository: ${{ github.event.client_payload.repository.full_name }}
-          check_run_id: ${{ needs.register.outputs.run_id }}
-          policyname: ${{ needs.vista_context.outputs.policy_name }}
-          path: ${{ github.event.client_payload.annotationObj.path }}
-          start_line: ${{ github.event.client_payload.annotationObj.start_line }}
-          end_line: ${{ github.event.client_payload.annotationObj.end_line }}
-          break_build_invalid_policy: ${{ github.event.client_payload.break_build_invalid_policy }}
+      needs: [register, vista_context]
+      runs-on: ${{ fromJson(github.event.client_payload.user_config.default_runs_on) }}
+      name: Validations
+      steps:
+        - name: Verify Veracode API credentials
+          id: verify_api_creds
+          uses: veracode/github-actions-integration-helper@v0.1.9
+          with:
+            action: validateVeracodeApiCreds
+            token: ${{ github.event.client_payload.token }}
+            vid: ${{ secrets.VERACODE_API_ID }}
+            vkey: ${{ secrets.VERACODE_API_KEY }}
+            appname: ${{ needs.vista_context.outputs.profile_name }}
+            source_repository: ${{ github.event.client_payload.repository.full_name }}
+            check_run_id: ${{ needs.register.outputs.run_id }}
+  
+        - name: Verify Policy name
+          id: verify_policy_name
+          if: success()
+          uses: veracode/github-actions-integration-helper@v0.1.9
+          with:
+            action: validatePolicyName
+            token: ${{ github.event.client_payload.token }}
+            vid: ${{ secrets.VERACODE_API_ID }}
+            vkey: ${{ secrets.VERACODE_API_KEY }}
+            appname: ${{ needs.vista_context.outputs.profile_name }}
+            source_repository: ${{ github.event.client_payload.repository.full_name }}
+            check_run_id: ${{ needs.register.outputs.run_id }}
+            policyname: ${{ needs.vista_context.outputs.policy_name }}
+            path: ${{ github.event.client_payload.annotationObj.path }}
+            start_line: ${{ github.event.client_payload.annotationObj.start_line }}
+            end_line: ${{ github.event.client_payload.annotationObj.end_line }}
+            break_build_invalid_policy: ${{ github.event.client_payload.break_build_invalid_policy }}
 
   build:
     needs: validations
