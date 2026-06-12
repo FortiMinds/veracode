@@ -82,11 +82,8 @@ jobs:
       always() &&
       needs.vista_context.outputs.onboarded == 'false'
     runs-on: ubuntu-latest
-    steps:
-      - name: Debug PR payload
-        run: |
-          echo '${{ toJson(github.event.client_payload) }}'
 
+    steps:
       - name: Add Vista Compliance Comment
         uses: actions/github-script@v7
         with:
@@ -105,28 +102,30 @@ jobs:
               return;
             }
 
+            const message = [
+              '⚠️ Vista Compliance Check Failed',
+              '',
+              'Repository: ${{ github.event.client_payload.repository.full_name }}',
+              '',
+              '${{ needs.vista_context.outputs.compliance_message }}',
+              '',
+              'Required Actions:',
+              '1. Login to Vista',
+              '2. Create or map a Business Application',
+              '3. Associate this repository',
+              '4. Configure Veracode application mapping',
+              '5. Re-run the pull request',
+              '',
+              'Control ID: VISTA-CONTEXT-001',
+              'Severity: HIGH'
+            ].join('\n');
+
             await github.rest.issues.createComment({
               owner,
               repo,
               issue_number: prNumber,
-              body: `⚠️ Vista Compliance Check Failed
-
-Repository: ${{ github.event.client_payload.repository.full_name }}
-
-${{ needs.vista_context.outputs.compliance_message }}
-
-Required Actions:
-1. Login to Vista
-2. Create or map a Business Application
-3. Associate this repository
-4. Configure Veracode application mapping
-5. Re-run the pull request
-
-Control ID: VISTA-CONTEXT-001
-Severity: HIGH`
+              body: message
             });
-
-            console.log(`Vista compliance comment added to PR #${prNumber}`);
 
   validations:
     needs: [register, vista_context]
