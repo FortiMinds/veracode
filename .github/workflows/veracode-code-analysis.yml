@@ -66,83 +66,112 @@ jobs:
 
   vista_compliance:
     needs: vista_context
-    if: needs.vista_context.outputs.onboarded == 'false'
+    if: |
+      always() &&
+      needs.vista_context.outputs.onboarded == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Create Compliance Annotation
         run: |
-          echo "::warning::Repository is not onboarded into Vista."
-          echo "::warning::Please complete Vista onboarding."
-          
+          echo "::warning::Vista Compliance Check Failed"
+          echo "::warning::${{ needs.vista_context.outputs.compliance_message }}"
+
   vista_pr_comment:
     needs: vista_context
     if: |
-      needs.vista_context.outputs.onboarded == 'false' &&
-      github.event.client_payload.event_type == 'pull_request'
+      always() &&
+      needs.vista_context.outputs.onboarded == 'false'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - name: Debug PR payload
+        run: |
+          echo '${{ toJson(github.event.client_payload) }}'
+
+      - name: Add Vista Compliance Comment
+        uses: actions/github-script@v7
         with:
           github-token: ${{ github.event.client_payload.token }}
           script: |
+            const owner = '${{ github.event.client_payload.repository.owner }}';
+            const repo = '${{ github.event.client_payload.repository.name }}';
+
+            const prNumber =
+              Number('${{ github.event.client_payload.pr_number }}') ||
+              Number('${{ github.event.client_payload.pull_request_number }}') ||
+              Number('${{ github.event.client_payload.pull_request_num }}');
+
+            if (!prNumber) {
+              console.log('No PR number found in client_payload. Skipping PR comment.');
+              return;
+            }
+
             await github.rest.issues.createComment({
-              owner: '${{ github.event.client_payload.repository.owner }}',
-              repo: '${{ github.event.client_payload.repository.name }}',
-              issue_number: ${{ github.event.client_payload.pull_request_number }},
-              body: `
-              ⚠️ Vista Compliance Check
-              
-              This repository is not onboarded into Vista.
-              
-              Security scanning cannot be associated with a Business Application.
-              
-              Required Action:
-              1. Login to Vista
-              2. Create or map a Business Application
-              3. Associate this repository
-              4. Re-run the pull request
-              
-              Repository:
-              ${{ github.event.client_payload.repository.full_name }}
-              });
-                
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: `⚠️ Vista Compliance Check Failed
+
+Repository: ${{ github.event.client_payload.repository.full_name }}
+
+${{ needs.vista_context.outputs.compliance_message }}
+
+Required Actions:
+1. Login to Vista
+2. Create or map a Business Application
+3. Associate this repository
+4. Configure Veracode application mapping
+5. Re-run the pull request
+
+Control ID: VISTA-CONTEXT-001
+Severity: HIGH`
+            });
+
+            console.log(`Vista compliance comment added to PR #${prNumber}`);
+
   validations:
-      needs: [register, vista_context]
-      runs-on: ${{ fromJson(github.event.client_payload.user_config.default_runs_on) }}
-      name: Validations
-      steps:
-        - name: Verify Veracode API credentials
-          id: verify_api_creds
-          uses: veracode/github-actions-integration-helper@v0.1.9
-          with:
-            action: validateVeracodeApiCreds
-            token: ${{ github.event.client_payload.token }}
-            vid: ${{ secrets.VERACODE_API_ID }}
-            vkey: ${{ secrets.VERACODE_API_KEY }}
-            appname: ${{ needs.vista_context.outputs.profile_name }}
-            source_repository: ${{ github.event.client_payload.repository.full_name }}
-            check_run_id: ${{ needs.register.outputs.run_id }}
-  
-        - name: Verify Policy name
-          id: verify_policy_name
-          if: success()
-          uses: veracode/github-actions-integration-helper@v0.1.9
-          with:
-            action: validatePolicyName
-            token: ${{ github.event.client_payload.token }}
-            vid: ${{ secrets.VERACODE_API_ID }}
-            vkey: ${{ secrets.VERACODE_API_KEY }}
-            appname: ${{ needs.vista_context.outputs.profile_name }}
-            source_repository: ${{ github.event.client_payload.repository.full_name }}
-            check_run_id: ${{ needs.register.outputs.run_id }}
-            policyname: ${{ needs.vista_context.outputs.policy_name }}
-            path: ${{ github.event.client_payload.annotationObj.path }}
-            start_line: ${{ github.event.client_payload.annotationObj.start_line }}
-            end_line: ${{ github.event.client_payload.annotationObj.end_line }}
-            break_build_invalid_policy: ${{ github.event.client_payload.break_build_invalid_policy }}
+    needs: [register, vista_context]
+    if: |
+      always() &&
+      needs.vista_context.outputs.onboarded == 'true'
+    runs-on: ${{ fromJson(github.event.client_payload.user_config.default_runs_on) }}
+    name: Validations
+    steps:
+      - name: Verify Veracode API credentials
+        id: verify_api_creds
+        uses: veracode/github-actions-integration-helper@v0.1.9
+        with:
+          action: validateVeracodeApiCreds
+          token: ${{ github.event.client_payload.token }}
+          vid: ${{ secrets.VERACODE_API_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY }}
+          appname: ${{ needs.vista_context.outputs.profile_name }}
+          source_repository: ${{ github.event.client_payload.repository.full_name }}
+          check_run_id: ${{ needs.register.outputs.run_id }}
+
+      - name: Verify Policy name
+        id: verify_policy_name
+        if: success()
+        uses: veracode/github-actions-integration-helper@v0.1.9
+        with:
+          action: validatePolicyName
+          token: ${{ github.event.client_payload.token }}
+          vid: ${{ secrets.VERACODE_API_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY }}
+          appname: ${{ needs.vista_context.outputs.profile_name }}
+          source_repository: ${{ github.event.client_payload.repository.full_name }}
+          check_run_id: ${{ needs.register.outputs.run_id }}
+          policyname: ${{ needs.vista_context.outputs.policy_name }}
+          path: ${{ github.event.client_payload.annotationObj.path }}
+          start_line: ${{ github.event.client_payload.annotationObj.start_line }}
+          end_line: ${{ github.event.client_payload.annotationObj.end_line }}
+          break_build_invalid_policy: ${{ github.event.client_payload.break_build_invalid_policy }}
 
   build:
-    needs: validations
+    needs: [validations, vista_context]
+    if: |
+      always() &&
+      needs.vista_context.outputs.onboarded == 'true' &&
+      needs.validations.result == 'success'
     uses: ./.github/workflows/veracode-build-artifact-for-scanning.yml
     with:
       repository: ${{ github.event.client_payload.repository.full_name }}
@@ -159,9 +188,11 @@ jobs:
 
   pipeline_scan:
     needs: [build, register, vista_context]
-    if: | 
+    if: |
+      always() &&
       contains(github.event.action, 'pipeline') &&
-      needs.vista_context.outputs.onboarded == 'true'
+      needs.vista_context.outputs.onboarded == 'true' &&
+      needs.build.result == 'success'
     uses: ./.github/workflows/veracode-pipeline-scan.yml
     with:
       policy_name: ${{ needs.vista_context.outputs.policy_name }}
@@ -185,7 +216,11 @@ jobs:
 
   policy_scan:
     needs: [build, register, vista_context]
-    if: contains(github.event.action, 'policy')
+    if: |
+      always() &&
+      contains(github.event.action, 'policy') &&
+      needs.vista_context.outputs.onboarded == 'true' &&
+      needs.build.result == 'success'
     uses: ./.github/workflows/veracode-policy-scan.yml
     with:
       profile_name: ${{ needs.vista_context.outputs.profile_name }}
