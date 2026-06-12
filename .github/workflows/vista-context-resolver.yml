@@ -1,0 +1,86 @@
+name: Vista Context Resolver
+
+on:
+  workflow_call:
+    inputs:
+      repo_name:
+        required: true
+        type: string
+      full_name:
+        required: true
+        type: string
+      org_name:
+        required: true
+        type: string
+      branch:
+        required: false
+        type: string
+      commit_sha:
+        required: false
+        type: string
+      event_type:
+        required: false
+        type: string
+
+    outputs:
+      profile_name:
+        value: ${{ jobs.resolve.outputs.profile_name }}
+      policy_name:
+        value: ${{ jobs.resolve.outputs.policy_name }}
+      criticality:
+        value: ${{ jobs.resolve.outputs.criticality }}
+      app_guid:
+        value: ${{ jobs.resolve.outputs.app_guid }}
+
+    secrets:
+      VISTA_CONTEXT_API_URL:
+        required: true
+      VISTA_CONTEXT_API_TOKEN:
+        required: true
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+
+    outputs:
+      profile_name: ${{ steps.resolve.outputs.profile_name }}
+      policy_name: ${{ steps.resolve.outputs.policy_name }}
+      criticality: ${{ steps.resolve.outputs.criticality }}
+      app_guid: ${{ steps.resolve.outputs.app_guid }}
+
+    steps:
+      - name: Resolve Vista Context
+        id: resolve
+        run: |
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.VISTA_CONTEXT_API_URL }}/repository-context" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.VISTA_CONTEXT_API_TOKEN }}" \
+            -d '{
+              "repo_name": "${{ inputs.repo_name }}",
+              "full_name": "${{ inputs.full_name }}",
+              "org_name": "${{ inputs.org_name }}",
+              "branch": "${{ inputs.branch }}",
+              "commit_sha": "${{ inputs.commit_sha }}",
+              "event_type": "${{ inputs.event_type }}"
+            }')
+
+          HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+
+          echo "$HTTP_BODY" > vista-context.json
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Vista Context API failed with status $HTTP_STATUS"
+            cat vista-context.json
+            exit 1
+          fi
+
+          PROFILE_NAME=$(jq -r '.veracode.profileName // empty' vista-context.json)
+          POLICY_NAME=$(jq -r '.veracode.policyName // empty' vista-context.json)
+          CRITICALITY=$(jq -r '.veracode.businessCriticality // empty' vista-context.json)
+          APP_GUID=$(jq -r '.veracode.appGuid // empty' vista-context.json)
+
+          echo "profile_name=$PROFILE_NAME" >> "$GITHUB_OUTPUT"
+          echo "policy_name=$POLICY_NAME" >> "$GITHUB_OUTPUT"
+          echo "criticality=$CRITICALITY" >> "$GITHUB_OUTPUT"
+          echo "app_guid=$APP_GUID" >> "$GITHUB_OUTPUT"
