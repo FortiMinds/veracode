@@ -91,23 +91,45 @@ jobs:
           script: |
             const owner = '${{ github.event.client_payload.repository.owner }}';
             const repo = '${{ github.event.client_payload.repository.name }}';
+            const sha = '${{ github.event.client_payload.sha }}';
 
-            const prNumber =
+            let prNumber =
               Number('${{ github.event.client_payload.pr_number }}') ||
               Number('${{ github.event.client_payload.pull_request_number }}') ||
               Number('${{ github.event.client_payload.pull_request_num }}');
 
             if (!prNumber) {
-              console.log('No PR number found in client_payload. Skipping PR comment.');
+              console.log(`PR number not present in payload. Looking up PR by commit SHA: ${sha}`);
+
+              const pulls = await github.request(
+                'GET /repos/{owner}/{repo}/commits/{ref}/pulls',
+                {
+                  owner,
+                  repo,
+                  ref: sha,
+                  headers: {
+                    accept: 'application/vnd.github+json'
+                  }
+                }
+              );
+
+              if (pulls.data && pulls.data.length > 0) {
+                prNumber = pulls.data[0].number;
+                console.log(`Found PR #${prNumber}`);
+              }
+            }
+
+            if (!prNumber) {
+              console.log('No PR found for this scan event. Skipping PR comment.');
               return;
             }
 
             const message = [
               '⚠️ Vista Compliance Check Failed',
               '',
-              'Repository: ${{ github.event.client_payload.repository.full_name }}',
+              `Repository: ${{ github.event.client_payload.repository.full_name }}`,
               '',
-              '${{ needs.vista_context.outputs.compliance_message }}',
+              `${{ needs.vista_context.outputs.compliance_message }}`,
               '',
               'Required Actions:',
               '1. Login to Vista',
@@ -126,6 +148,8 @@ jobs:
               issue_number: prNumber,
               body: message
             });
+
+            console.log(`Vista compliance comment added to PR #${prNumber}`);
 
   validations:
     needs: [register, vista_context]
