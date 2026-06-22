@@ -88,7 +88,7 @@ jobs:
             echo "criticality=" >> "$GITHUB_OUTPUT"
             echo "app_guid=" >> "$GITHUB_OUTPUT"
             echo "compliance_status=FAILED" >> "$GITHUB_OUTPUT"
-            echo "compliance_message=Repository is not mapped to a Business Application in Vista. Please complete Vista onboarding before security scanning." >> "$GITHUB_OUTPUT"
+            echo "compliance_message=Repository is not mapped to a Business Application in App sec platform. Please complete App sec platform onboarding before security scanning." >> "$GITHUB_OUTPUT"
 
             echo "::warning::Vista Compliance Check Failed - Repository is not mapped to a Business Application."
             exit 0
