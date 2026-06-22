@@ -101,9 +101,9 @@ jobs:
               '  policy_name: "${{ needs.vista_context.outputs.policy_name }}"',
               '  app_guid: "${{ needs.vista_context.outputs.app_guid }}"',
               '',
-              'vista:',
+              'App sec platform:',
               '  managed: true',
-              '  generated_by: "vista-context-resolver"',
+              '  generated_by: "App sec platform - context-resolver"',
               '  generated_at: "' + new Date().toISOString() + '"',
               ''
             ].join('\n');
@@ -204,21 +204,18 @@ jobs:
             }
 
             const message = [
-              '⚠️ Vista Compliance Check Failed',
+              '⚠️ App sec platform Compliance Check Failed',
               '',
               `Repository: ${{ github.event.client_payload.repository.full_name }}`,
               '',
               `${{ needs.vista_context.outputs.compliance_message }}`,
               '',
               'Required Actions:',
-              '1. Login to Vista',
+              '1. Login to App sec platform : https://test.fortiminds.com',
               '2. Create or map a Business Application',
               '3. Associate this repository',
               '4. Configure Veracode application mapping',
-              '5. Re-run the pull request',
-              '',
-              'Control ID: VISTA-CONTEXT-001',
-              'Severity: HIGH'
+              '5. Re-run the pull request'
             ].join('\n');
 
             await github.rest.issues.createComment({
