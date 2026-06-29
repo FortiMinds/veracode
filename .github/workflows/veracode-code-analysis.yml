@@ -68,7 +68,8 @@ jobs:
     needs: vista_context
     if: |
       always() &&
-      needs.vista_context.outputs.onboarded == 'true'
+      needs.vista_context.outputs.onboarded == 'true' &&
+      !contains(github.event.client_payload.head_commit_message || '', 'chore: update Vista manifest')
 
     runs-on: ubuntu-latest
 
@@ -90,7 +91,6 @@ jobs:
               '  name: "${{ github.event.client_payload.repository.name }}"',
               '  full_name: "${{ github.event.client_payload.repository.full_name }}"',
               '  branch: "${{ github.event.client_payload.repository.branch }}"',
-              '  commit_sha: "${{ github.event.client_payload.sha }}"',
               '',
               'business_application:',
               '  name: "${{ needs.vista_context.outputs.profile_name }}"',
@@ -101,14 +101,14 @@ jobs:
               '  policy_name: "${{ needs.vista_context.outputs.policy_name }}"',
               '  app_guid: "${{ needs.vista_context.outputs.app_guid }}"',
               '',
-              'App sec platform:',
+              'vista:',
               '  managed: true',
-              '  generated_by: "App sec platform - context-resolver"',
-              '  generated_at: "' + new Date().toISOString() + '"',
+              '  generated_by: "fortiminds-vista"',
               ''
             ].join('\n');
 
-            let sha;
+            let sha = undefined;
+            let existingContent = null;
 
             try {
               const existingFile = await github.rest.repos.getContent({
@@ -120,7 +120,8 @@ jobs:
 
               if (!Array.isArray(existingFile.data)) {
                 sha = existingFile.data.sha;
-                console.log('Existing vista_manifest.yaml found. SHA: ' + sha);
+                existingContent = Buffer.from(existingFile.data.content, 'base64').toString('utf8');
+                console.log('Existing vista_manifest.yaml found.');
               }
             } catch (error) {
               if (error.status === 404) {
@@ -128,6 +129,11 @@ jobs:
               } else {
                 throw error;
               }
+            }
+
+            if (existingContent && existingContent.trim() === manifest.trim()) {
+              console.log('Vista manifest unchanged. Skipping write-back.');
+              return;
             }
 
             await github.rest.repos.createOrUpdateFileContents({
@@ -140,7 +146,7 @@ jobs:
               sha: sha
             });
 
-            console.log('vista_manifest.yaml written to ' + owner + '/' + repo + '@' + branch);
+            console.log('vista_manifest.yaml created/updated successfully.');
                 
 
   vista_compliance:
